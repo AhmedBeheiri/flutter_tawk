@@ -33,17 +33,49 @@ class Tawk extends StatefulWidget {
   }) : super(key: key);
 
   @override
+  @override
   _TawkState createState() => _TawkState();
 }
 
 class _TawkState extends State<Tawk> {
-  late WebViewController _controller;
+  late final WebViewController _controller;
   bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (NavigationRequest request) {
+            if (request.url == 'about:blank' || request.url.contains('tawk.to')) {
+              return NavigationDecision.navigate;
+            }
+            if (widget.onLinkTap != null) {
+              widget.onLinkTap!(request.url);
+            }
+            return NavigationDecision.prevent;
+          },
+          onPageFinished: (_) async {
+            if (widget.visitor != null) {
+              _setUser(widget.visitor!);
+            }
+            if (widget.onLoad != null) {
+              widget.onLoad!();
+            }
+            setState(() {
+              _isLoading = false;
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.directChatLink));
+  }
 
   void _setUser(TawkVisitor visitor) {
     final json = jsonEncode(visitor);
     String javascriptString;
-
     if (Platform.isIOS) {
       javascriptString = '''
         Tawk_API = Tawk_API || {};
@@ -57,48 +89,14 @@ class _TawkState extends State<Tawk> {
         };
       ''';
     }
-
-    _controller.runJavascript(javascriptString);
+    _controller.runJavaScript(javascriptString);
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        WebView(
-          initialUrl: widget.directChatLink,
-          javascriptMode: JavascriptMode.unrestricted,
-          onWebViewCreated: (WebViewController webViewController) {
-            setState(() {
-              _controller = webViewController;
-            });
-          },
-          navigationDelegate: (NavigationRequest request) {
-            if (request.url == 'about:blank' ||
-                request.url.contains('tawk.to')) {
-              return NavigationDecision.navigate;
-            }
-
-            if (widget.onLinkTap != null) {
-              widget.onLinkTap!(request.url);
-            }
-
-            return NavigationDecision.prevent;
-          },
-          onPageFinished: (_) {
-            if (widget.visitor != null) {
-              _setUser(widget.visitor!);
-            }
-
-            if (widget.onLoad != null) {
-              widget.onLoad!();
-            }
-
-            setState(() {
-              _isLoading = false;
-            });
-          },
-        ),
+        WebViewWidget(controller: _controller),
         _isLoading
             ? widget.placeholder ??
                 const Center(
@@ -109,3 +107,4 @@ class _TawkState extends State<Tawk> {
     );
   }
 }
+
